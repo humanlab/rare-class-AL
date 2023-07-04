@@ -77,7 +77,6 @@ class CAL(ALStrategy):
         labels_labeled = [inst["label"] for inst in self.annotated_corpus]
 
         # KNN
-        # look at lines 296~ in acquisition/cal.py
         neigh = KNeighborsClassifier(n_neighbors=100)
         neigh.fit(X=embeds_labeled, y=labels_labeled) # X: embeddings of labeled data, y: list of all labels of labeled data
         criterion = torch.nn.KLDivLoss(reduction="none") # https://pytorch.org/docs/stable/generated/torch.nn.KLDivLoss.html

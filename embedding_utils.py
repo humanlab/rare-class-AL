@@ -5,25 +5,6 @@
 
 import transformers
 
-def extract_embeddings_to_file(model_name, input_file, output_file):
-    # load the model
-    model = transformers.AutoModel.from_pretrained(model_name)
-    tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
-
-    # load the data
-    with open(input_file, "r") as f:
-        lines = f.readlines()
-
-    # extract embeddings
-    with open(output_file, "w") as f:
-        for line in lines:
-            # encode the line
-            inputs = tokenizer(line, return_tensors="pt")
-            # get the embedding
-            outputs = model(**inputs)
-            # write the embedding to file
-            f.write(str(outputs[0].detach().numpy().tolist()[0]) + "\n")
-
 #get_embedding() function to return the embedding of a sentence 
 
 def get_embedding(model_name, sentence):
@@ -37,5 +18,18 @@ def get_embedding(model_name, sentence):
     outputs = model(**inputs)
     # return the embedding
     return outputs[0].detach().numpy().tolist()[0]
+
+
+def extract_embeddings_to_file(model_name, input_file, output_file):
+
+    # load the data
+    with open(input_file, "r") as f:
+        lines = f.readlines()
+
+    # extract embeddings
+    with open(output_file, "w") as f:
+        for line in lines:
+            # encode the line and write the embedding to file
+            f.write(str(get_embedding(model_name, line)) + "\n")
 
 
