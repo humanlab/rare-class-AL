@@ -82,24 +82,17 @@ class CAL(ALStrategy):
         for embeds_candidate, logits_candidate in tqdm(zip(embeds_unlabeled, logits_unlabeled)):
             distances_, neighbors = neigh.kneighbors(X=[embeds_candidate], return_distance=True)
             distances.append(distances_[0])
-            # neighbors_labels = labels_labeled[neighbors[0]] # don't need it
             # calculate score
             logits_neighbors = [logits_labeled[neighbor] for neighbor in neighbors]
             pred_neighbors = [np.argmax(logits_labeled[n], axis=1) for n in neighbors] # predicted labels # checkkkkkk
             prob_neighbors = F.softmax(logits_labeled[neighbors], dim=-1) # checkkkkk
             pred_candidate = [np.argmax(logits_candidate)]
-            # num_diff_pred = len(list(set(pred_neighbors).intersection(pred_candidate)))
-            # print(num_diff_pred)    #isn't this always 0 or 1
-            #
-            # if num_diff_pred > 0:   num_adv += 1
-            # args.ce = False
+
             uda_softmax_temp = 1
             logprob_candidate = F.log_softmax(logits_candidate / uda_softmax_temp, dim=-1) # checkkkk
             kl = np.array([torch.sum(criterion(logprob_candidate, prob_neighbor), dim=-1).numpy() for prob_neighbor in prob_neighbors])
             kl_scores.append(kl.mean())
 
-        # annotations_per_iteration = 300
-        #selected_inds = np.argpartition(kl_scores, -300)[-300:]
         score_pairs = sorted(zip([i for i in range(len(kl_scores))], kl_scores), key=lambda x: x[1], reverse=True)
         score_pairs = sorted(score_pairs[:self.batch_size], key=lambda x: x[0]) + score_pairs[self.batch_size:]
         selected_inds = [pair[0] for pair in score_pairs]
@@ -123,9 +116,6 @@ class CoreSetAL(ALStrategy):
         #labeled_embeds = labeled_embeds.numpy()
         unlabeled_embeds.extend(labeled_embeds)
         all_embeds = np.asarray(unlabeled_embeds)
-
-        #np.asarray(labeled_embeds.cpu() + unlabeled_embeds.cpu())
-        #print(len(all_embeds))
 
         unlabeled_idxs = [False]*(len(self.unannotated_corpus))
         labeled_idxs = [True]*(len(self.annotated_corpus))
