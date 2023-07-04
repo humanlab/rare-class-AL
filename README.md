@@ -1,1 +1,1 @@
-# active_learning_for_rare_class
+# Active Learning for Rare Class
