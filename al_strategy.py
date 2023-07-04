@@ -1,5 +1,8 @@
 import numpy as np
 import torch.nn.functional as F
+import torch
+from sklearn.neighbors import KNeighborsClassifier
+from tqdm import tqdm
 
 #class for active learning strategy that takes probabilities, strategy, unannotated corpus and embedding model as inputs
 #returns the indices of the most informative instances
@@ -21,26 +24,33 @@ class ALStrategy:
         elif self.strategy == 'prob_rare_class':
             return PRC(**kwargs)
         """
+        self.annotated_corpus = kwargs['annotated_corpus']
         self.unannotated_corpus = kwargs['unannotated_corpus']
         self.batch_size = kwargs['batch_size']
         pass
 
     def select_indices(self, probs):
-        pass
-
+        raise NotImplementedError
+    
+    
 class RandomAL(ALStrategy):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def select_indices(self, probs):
-        indices = np.random.choice(len(probs), self.batch_size, replace=False)
+    def select_indices(self):
+        indices = np.random.choice(len(self.unannotated_corpus), self.batch_size, replace=False)
         return indices
     
 class EntropyAL(ALStrategy):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        try:
+            self.model= kwargs['model']
+        except KeyError:
+            raise ValueError('model must be provided for entropy strategy')
 
-    def select_indices(self, probs):
+    def select_indices(self):
+        probs = self.model.get_probabilities(self.unannotated_corpus)
         entropy = np.sum(-probs * np.log(probs), axis=1)
         indices = np.argsort(entropy,)[::-1][:self.batch_size] #descending order
         return indices
@@ -48,18 +58,23 @@ class EntropyAL(ALStrategy):
 class CAL(ALStrategy):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        try:
+            self.model= kwargs['model']
+        except KeyError:
+            raise ValueError('model must be provided for contrastive_active_learning strategy')
 
-    def select_indices(self, probs):
-        train_output = trainer.predict(labeled_data)
+    def select_indices(self):
 
-        ids_unlabeled = [inst["id"] for inst in unlabeled_data]
-        embeds_unlabeled = trainer.extract_embeddings(unlabeled_data)
-        logits_unlabeled = torch.from_numpy(test_output.predictions)
+        train_output = self.model.predict(self.annotated_corpus)
+
+        ids_unlabeled = [inst["id"] for inst in self.unannotated_corpus]
+        embeds_unlabeled = self.model.get_embeddings(self.unannotated_corpus)
+        logits_unlabeled = torch.from_numpy(train_output.predictions)
 
         # labeled_ids = [inst["id"] for inst in labeled_data]
-        embeds_labeled = trainer.extract_embeddings(labeled_data)
+        embeds_labeled = self.model.get_embeddings(self.annotated_corpus)
         logits_labeled = torch.from_numpy(train_output.predictions)
-        labels_labeled = [inst["label"] for inst in labeled_data]
+        labels_labeled = [inst["label"] for inst in self.annotated_corpus]
 
         # KNN
         # look at lines 296~ in acquisition/cal.py
@@ -93,9 +108,85 @@ class CAL(ALStrategy):
         # annotations_per_iteration = 300
         #selected_inds = np.argpartition(kl_scores, -300)[-300:]
         score_pairs = sorted(zip([i for i in range(len(kl_scores))], kl_scores), key=lambda x: x[1], reverse=True)
-        score_pairs = sorted(score_pairs[:args.active_learning_sample_size], key=lambda x: x[0]) + score_pairs[args.active_learning_sample_size:]
+        score_pairs = sorted(score_pairs[:self.batch_size], key=lambda x: x[0]) + score_pairs[self.batch_size:]
         selected_inds = [pair[0] for pair in score_pairs]
         sampled_ids = np.array(ids_unlabeled)[selected_inds]
+        return sampled_ids
+
+
+class CoreSetAL(ALStrategy):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        try:
+            self.model= kwargs['model']
+        except KeyError:
+            raise ValueError('model must be provided for contrastive_active_learning strategy')
+
+    def select_indices(self):
+        ids = [inst["id"] for inst in self.unannotated_corpus]
+        #get the penultimate layer embeddings from trainer.model
+        unlabeled_embeds = self.model.get_embeddings(self.unannotated_corpus)
+        labeled_embeds = self.model.get_embeddings(self.annotated_corpus)
+        #labeled_embeds = labeled_embeds.numpy()
+        unlabeled_embeds.extend(labeled_embeds)
+        all_embeds = np.asarray(unlabeled_embeds)
+
+        #np.asarray(labeled_embeds.cpu() + unlabeled_embeds.cpu())
+        #print(len(all_embeds))
+
+        unlabeled_idxs = [False]*(len(self.unannotated_corpus))
+        labeled_idxs = [True]*(len(self.annotated_corpus))
+        unlabeled_idxs.extend(labeled_idxs)
+        labeled_idxs = np.array(unlabeled_idxs.copy(),dtype=bool) # True if labeled False if unlabeled
+        #init_labeled_idxs = labeled_idxs.copy() #keeping track of how it looks like initially
+        del unlabeled_idxs
+
+
+        dist_mat = np.matmul(all_embeds, all_embeds.transpose())
+        sq = np.array(dist_mat.diagonal()).reshape(len(labeled_idxs), 1)
+        dist_mat *= -2
+        dist_mat += sq
+        dist_mat += sq.transpose()
+        dist_mat = np.sqrt(dist_mat)
+        mat = dist_mat[~labeled_idxs, :][:, labeled_idxs]
+        picked_ids = list()
+        for i in tqdm(range(len(self.unannotated_corpus)), ncols=100):
+            mat_min = mat.min(axis=1)
+            q_idx_ = mat_min.argmax()
+            q_idx = np.arange(len(labeled_idxs))[~labeled_idxs][q_idx_]
+            labeled_idxs[q_idx] = 1
+            picked_ids.append(ids[q_idx])
+            mat = np.delete(mat, q_idx_, 0)
+            mat = np.append(mat, dist_mat[~labeled_idxs, q_idx][:, None], axis=1)
+
+            #print (np.arange(len(all_embeds))[(init_labeled_idxs ^ labeled_idxs)])
+        
+        """with open(args.name+"coreset_ranked_ids.txt", "w") as f:
+            temp = sorted(picked_ids[:args.active_learning_sample_size], key = lambda x: int(x[2:]))
+            for i in range(len(temp)):
+                if i < args.active_learning_sample_size:
+                    f.write(temp[i] +"\n")
+                else:
+                    f.write(picked_ids[i] + "\n")
+        """
+        return picked_ids[:self.batch_size]
+
+class PRC(ALStrategy):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        try:
+            self.model= kwargs['model']
+        except KeyError:
+            raise ValueError('model must be provided for contrastive_active_learning strategy')
+        
+        #fix this for rare class calculated from the annotated corpus
+        self.rare_class = self.annotated_corpus[0]['label'] #default is 1: for positive rare class
+    
+    def select_indices(self):
+        probs = self.model.get_probabilities(self.unannotated_corpus)
+        indices = np.argsort([p[self.model.rare_class] for p in probs],)[::-1][:self.batch_size]
+        return indices
+    
 
 """
 class ALStrategy:
