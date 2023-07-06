@@ -41,7 +41,7 @@ class EntropyAL(ALStrategy):
         try:
             self.model= kwargs['model']
         except KeyError:
-            raise ValueError('model must be provided for entropy strategy')
+            raise ValueError('model must be provided for Entropy strategy')
 
     def select_indices(self):
         probs = self.model.get_probabilities(self.unannotated_corpus)
@@ -55,7 +55,7 @@ class CAL(ALStrategy):
         try:
             self.model= kwargs['model']
         except KeyError:
-            raise ValueError('model must be provided for contrastive_active_learning strategy')
+            raise ValueError('model must be provided for Contrastive Active Learning strategy')
 
     def select_indices(self):
 
@@ -106,7 +106,7 @@ class CoreSetAL(ALStrategy):
         try:
             self.model= kwargs['model']
         except KeyError:
-            raise ValueError('model must be provided for contrastive_active_learning strategy')
+            raise ValueError('model must be provided for CoreSet strategy')
 
     def select_indices(self):
         ids = [inst["id"] for inst in self.unannotated_corpus]
@@ -151,7 +151,7 @@ class PRC(ALStrategy):
         try:
             self.model= kwargs['model']
         except KeyError:
-            raise ValueError('model must be provided for contrastive_active_learning strategy')
+            raise ValueError('model must be provided for PRC strategy')
         
         #fix this for rare class calculated from the annotated corpus
         self.rare_class = self.annotated_corpus[0]['label'] #default is 1: for positive rare class
