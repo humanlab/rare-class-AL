@@ -48,7 +48,9 @@ class EntropyAL(ALStrategy):
         entropy = np.sum(-probs * np.log(probs), axis=1)
         indices = np.argsort(entropy,)[::-1][:self.batch_size] #descending order
         return indices
-    
+
+
+## adapted the code from https://github.com/mourga/contrastive-active-learning
 class CAL(ALStrategy):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -99,7 +101,7 @@ class CAL(ALStrategy):
         sampled_ids = np.array(ids_unlabeled)[selected_inds]
         return sampled_ids
 
-
+## adapted the code from https://github.com/ozansener/active_learning_coreset
 class CoreSetAL(ALStrategy):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
