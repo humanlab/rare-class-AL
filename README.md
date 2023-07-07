@@ -17,9 +17,13 @@ The PRC approach is a simple approach that picks examples most likely to be clas
 
 ## Setup
 
-'''
-pip install 
-'''
+Ideally, use Python>=3.8.
+
+```
+pip install -r requirements.txt
+```
+
+The demo for each AL strategy can be found in demo.ipynb.
 
 ## Citation
 
